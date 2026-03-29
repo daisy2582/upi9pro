@@ -3887,26 +3887,9 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         }
         
         if (!matchingRowButton) {
-          log(`searchAndClickAction: No matching row found after search after ${maxAttempts} attempts`, 'warn');
-          // Fallback: clear search, expand date range (Month/All) so row may be visible, then find by transfer_id
-          log(`searchAndClickAction: Fallback — clearing search and finding row by transfer_id in full table...`);
-          await clearSearchByCloseButton();
-          await clearSearch();
-          await new Promise(r => setTimeout(r, 1500));
-          // Row may be outside Week range: set Month or All so more rows load (fixes "not removed" when order is older)
-          const broaderFilter = await setDateFilterToMonthOrAll();
-          if (broaderFilter.success) {
-            log('searchAndClickAction: Fallback — applied Month/All filter so more rows are visible');
-            await new Promise(r => setTimeout(r, 2000));
-          } else {
-            await new Promise(r => setTimeout(r, 1000));
-          }
-          const fallbackIdx = await findRowIndexByOrderId(searchOrderId);
-          if (fallbackIdx >= 0) {
-            log(`searchAndClickAction: Fallback found row at index ${fallbackIdx}, clicking ${searchClickAction}...`);
-            const result = await clickApproveOrReject(fallbackIdx, searchClickAction, searchUtr);
-            return { success: result.success, submitted: result.submitted, message: result.message || (result.success ? 'Reject/approve completed via fallback' : 'Reject/approve failed') };
-          }
+          log(`searchAndClickAction: No matching row found after search — order likely already IN_PROCESS on panel (not visible in PENDING view)`, 'warn');
+          // Don't waste time with slow fallback (opening 15+ modals). Return not-found immediately.
+          // Background.js will mark the order as done since GatewayHub already confirmed the status.
           return await clearSearchAndReturn(`No row with matching transfer_id found after searching for ${searchOrderId}`);
         }
         
