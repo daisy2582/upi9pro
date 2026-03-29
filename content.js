@@ -3402,9 +3402,16 @@ async function fillApprovalModalAndSubmit(utr) {
 
   await new Promise(r => setTimeout(r, 200));
 
+  // Check for validation errors BEFORE submitting (e.g. "Please enter a valid UTR")
+  await new Promise(r => setTimeout(r, 300));
   const errorMsg = modal.querySelector('.text-danger, .error-message, .alert-danger, [role="alert"]');
   if (errorMsg && errorMsg.textContent.trim()) {
-    log(`fillApprovalModalAndSubmit: Validation error: ${errorMsg.textContent.trim()}`, 'warn');
+    const errText = errorMsg.textContent.trim();
+    log(`fillApprovalModalAndSubmit: ❌ Validation error before submit: "${errText}"`, 'error');
+    // Close modal and return error — don't submit with invalid data
+    closeModal();
+    await waitForModalClosed(2000);
+    return { success: false, submitted: false, error: errText };
   }
 
   const submitBtn = modal.querySelector('button[type="submit"].btn-primary');

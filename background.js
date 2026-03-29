@@ -1337,6 +1337,8 @@ async function processSingleMismatchOrder(tabId, order, pageType, index, total) 
       });
     } else if (buttonClickFailedMsg) {
       log(`Mismatch order_id=${orderId}: approve/reject button not clickable — will retry next poll`, 'info');
+    } else if (typeof msg === 'string' && (msg.toLowerCase().includes('valid utr') || msg.toLowerCase().includes('enter a valid') || msg.toLowerCase().includes('validation'))) {
+      log(`Mismatch order_id=${orderId}: ⚠️ UTR validation error: "${msg}" — NOT marking, will retry next poll`, 'warn');
     }
   }
   return res;
