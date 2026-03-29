@@ -3200,6 +3200,31 @@ async function findRowIndexByOrderId(orderId) {
  * Find any currently open modal by title keyword.
  * Checks .modal-content-main first, then .modal-content.
  */
+/**
+ * Capture toast notification from the panel (react-toastify).
+ * Reads the .Toastify__toast element text and determines type (success/error/warning).
+ * Returns { text, type } or null if no toast found.
+ */
+function captureToastNotification() {
+  const toasts = document.querySelectorAll('.Toastify__toast');
+  if (!toasts || toasts.length === 0) return null;
+  // Get the most recent toast (last in DOM)
+  const toast = toasts[toasts.length - 1];
+  const text = (toast.querySelector('.Toastify__toast-body')?.textContent || toast.textContent || '').trim();
+  if (!text) return null;
+  let type = 'info';
+  if (toast.classList.contains('Toastify__toast--error')) type = 'error';
+  else if (toast.classList.contains('Toastify__toast--success')) type = 'success';
+  else if (toast.classList.contains('Toastify__toast--warning')) type = 'warning';
+  // Also check by background color (some themes use colored toasts)
+  if (type === 'info') {
+    const bg = getComputedStyle(toast).backgroundColor || '';
+    if (bg.includes('220') || bg.includes('error') || text.toLowerCase().includes('error') || text.toLowerCase().includes('failed') || text.toLowerCase().includes('block')) type = 'error';
+    else if (bg.includes('success') || text.toLowerCase().includes('success') || text.toLowerCase().includes('approved')) type = 'success';
+  }
+  return { text, type };
+}
+
 function findModalByTitle(titleKeyword) {
   for (const sel of ['.modal-content-main', '.modal-content']) {
     const el = document.querySelector(sel);
@@ -3274,7 +3299,15 @@ async function fillRejectModalAndSubmit(remarksOrUtr) {
   const modalClosed = await waitForModalClosed(3000);
   if (modalClosed) {
     log('fillRejectModalAndSubmit: Modal closed - form submitted');
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 800));
+    // Capture toast/notification from panel (success or error)
+    const toastMsg = captureToastNotification();
+    if (toastMsg) {
+      log(`fillRejectModalAndSubmit: Panel notification: "${toastMsg.text}" (${toastMsg.type})`, toastMsg.type === 'error' ? 'error' : 'info');
+      if (toastMsg.type === 'error') {
+        return { success: false, submitted: true, error: toastMsg.text };
+      }
+    }
     return { success: true, submitted: true };
   }
   log('fillRejectModalAndSubmit: Modal did not close', 'warn');
@@ -3393,7 +3426,15 @@ async function fillApprovalModalAndSubmit(utr) {
   const modalClosed = await waitForModalClosed(5000);
   if (modalClosed) {
     log('fillApprovalModalAndSubmit: Modal closed - form submitted');
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 800));
+    // Capture toast/notification from panel (success or error)
+    const toastMsg = captureToastNotification();
+    if (toastMsg) {
+      log(`fillApprovalModalAndSubmit: Panel notification: "${toastMsg.text}" (${toastMsg.type})`, toastMsg.type === 'error' ? 'error' : 'info');
+      if (toastMsg.type === 'error') {
+        return { success: false, submitted: true, error: toastMsg.text };
+      }
+    }
     return { success: true, submitted: true };
   }
   const stillOpenModal = document.querySelector('.modal-content-main') || document.querySelector('.modal-content');
