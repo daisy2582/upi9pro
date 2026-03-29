@@ -1329,7 +1329,12 @@ async function processSingleMismatchOrder(tabId, order, pageType, index, total) 
       (msg.includes('Only ') && msg.includes('buttons found'))
     );
     if (rowNotFoundMsg) {
-      log(`Mismatch order_id=${orderId}: not found on panel — NOT updating final_action; will retry next poll`, 'info');
+      // Order not found on panel — it was already cleared (by this extension or manually).
+      // GatewayHub already confirmed the status, so mark it done in our DB to stop retrying.
+      log(`Mismatch order_id=${orderId}: not found on panel (already cleared) — marking as ${clickAction} in DB`, 'info');
+      await updateOrderFinalAction(orderId, clickAction, 'cleared from panel (not found on search)').catch(e => {
+        log(`Failed to update order final action for ${orderId}: ${e.message}`, 'warn');
+      });
     } else if (buttonClickFailedMsg) {
       log(`Mismatch order_id=${orderId}: approve/reject button not clickable — will retry next poll`, 'info');
     }
