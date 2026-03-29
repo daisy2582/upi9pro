@@ -3570,8 +3570,9 @@ async function clickApproveOrReject(rowIndex, action, utr = null) {
   }
 
   // Resolve which button is Approve and which is Reject
-  const approveBtn = btns.find(b => (b.textContent || '').trim().toLowerCase().includes('approve')) || btns[0];
-  const rejectBtn = btns.find(b => (b.textContent || '').trim().toLowerCase().includes('reject')) || btns[btns.length > 1 ? 1 : 0];
+  const btnsArr = Array.from(btns);
+  const approveBtn = btnsArr.find(b => (b.textContent || '').trim().toLowerCase().includes('approve')) || btnsArr[0];
+  const rejectBtn = btnsArr.find(b => (b.textContent || '').trim().toLowerCase().includes('reject')) || btnsArr[btnsArr.length > 1 ? 1 : 0];
   log(`clickApproveOrReject: Found buttons — Approve: "${approveBtn.textContent?.trim()}", Reject: "${rejectBtn.textContent?.trim()}"`);
   
   if (action === 'approve') {
