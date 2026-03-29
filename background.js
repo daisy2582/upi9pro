@@ -18,9 +18,9 @@ let readerLoopBusy = false;     // Lock to prevent overlapping reader loop itera
 let mismatchPollBusy = false;   // Lock to prevent overlapping mismatch poll cycles
 const MISMATCH_POLL_INTERVAL_MS = 1 * 60 * 1000; // 1 minute — mismatch clearing is priority
 const MISMATCH_BATCH_SIZE = 3;   // Max orders to process per mismatch tab (open → process 3 → close)
-const MISMATCH_INTER_ORDER_DELAY_MS = 5000; // Delay between individual orders in a batch (5s to avoid "actions blocked")
-const MISMATCH_INTER_BATCH_DELAY_MS = 10000; // Delay between batches (10s to avoid "actions blocked")
-const PROCESS_INTERVAL_MS = 20 * 1000; // 20 sec delay between end of one run and start of next (each run can take 40–80s)
+const MISMATCH_INTER_ORDER_DELAY_MS = 8000; // 8s between orders — slow and steady to avoid "actions blocked"
+const MISMATCH_INTER_BATCH_DELAY_MS = 15000; // 15s between batches
+const PROCESS_INTERVAL_MS = 30 * 1000; // 30 sec delay between reader loop runs — avoids triggering panel rate limiter
 const CRYPTO_PAGE_SWITCH_INTERVAL_MS = 5 * 60 * 1000; // Switch to crypto page every 5 minutes
 let lastCryptoPageVisitAt = 0; // Timestamp of last crypto page visit
 

@@ -3727,6 +3727,9 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
           // Continue anyway — search may still work with current filter
         }
         
+        // Brief pause after filter to let panel settle (avoids "actions blocked")
+        await new Promise(r => setTimeout(r, 1500));
+
         // Step 1: Enter search field and click search
         const searchRes = await applySearchByTransferReferenceId(searchOrderId);
         if (!searchRes?.success) {
