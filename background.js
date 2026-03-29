@@ -295,7 +295,8 @@ async function getOrCreateReaderTab() {
  */
 async function createFreshMismatchTab(url = 'https://agent.upi9.pro/withdrawls/') {
   log(`[createFreshMismatchTab] Creating fresh tab for: ${url}`);
-  const tab = await chrome.tabs.create({ url, active: false });
+  // MUST be active: true — Chrome throttles background tabs (DOM clicks/scrolls don't work)
+  const tab = await chrome.tabs.create({ url, active: true });
   const tabId = tab.id;
   log(`[createFreshMismatchTab] Created tab id=${tabId}`);
 
