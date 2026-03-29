@@ -1336,19 +1336,26 @@ async function processMismatchBatch(orderBatch, pageType, pageUrl) {
     // 1. Create fresh tab
     tabId = await createFreshMismatchTab(pageUrl);
 
-    // 2. Ensure logged in (use shared cookies from reader tab)
-    // Check if we're on login page; if so, login
+    // 2. Ensure logged in and on the correct withdrawals page
+    // Check if we're on login page; if so, login then navigate back to withdrawals
     const loginCheck = await sendToContent(tabId, 'isLoginPage').catch(() => ({ isLoginPage: false }));
     if (loginCheck?.isLoginPage) {
       log(`Mismatch ${pageType} batch: tab on login page, performing login...`);
-      await sendToContent(tabId, 'performLogin', {
+      const loginRes = await sendToContent(tabId, 'performLogin', {
         username: settings.panelUsername,
         password: settings.panelPassword
       }).catch(e => {
         log(`Mismatch ${pageType} batch: login failed: ${e.message}`, 'error');
+        return null;
       });
       await new Promise(r => setTimeout(r, 3000));
       await waitForTabComplete(tabId, 15000);
+
+      // After login, navigate back to the correct withdrawals page (login may leave us on root/dashboard)
+      log(`Mismatch ${pageType} batch: login done, navigating to ${pageUrl}...`);
+      await chrome.tabs.update(tabId, { url: pageUrl });
+      await waitForTabComplete(tabId, 20000);
+
       // Disable bfcache again after navigation
       try {
         await chrome.scripting.executeScript({
@@ -1357,7 +1364,26 @@ async function processMismatchBatch(orderBatch, pageType, pageUrl) {
         });
       } catch {}
       await ensureContentScriptInjected(tabId);
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    // Verify we're on the correct page before proceeding
+    const urlCheck = await sendToContent(tabId, 'getCurrentUrl').catch(() => null);
+    if (urlCheck) {
+      log(`Mismatch ${pageType} batch: current URL = ${urlCheck.url}`);
+      if (!urlCheck.pathname?.includes('/withdrawls')) {
+        log(`Mismatch ${pageType} batch: NOT on withdrawals page, navigating to ${pageUrl}...`, 'warn');
+        await chrome.tabs.update(tabId, { url: pageUrl });
+        await waitForTabComplete(tabId, 20000);
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            func: () => { window.addEventListener('unload', () => {}); },
+          });
+        } catch {}
+        await ensureContentScriptInjected(tabId);
+        await new Promise(r => setTimeout(r, 1500));
+      }
     }
 
     // 3. Set date filter to Week and refresh
