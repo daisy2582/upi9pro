@@ -3536,14 +3536,42 @@ async function clickApproveOrReject(rowIndex, action, utr = null) {
     }
   }
   
+  // Also try: scan ALL buttons in the row (not just btn-link-primary) for Approve/Reject text
   if (btns.length < 2) {
-    log(`clickApproveOrReject: only ${btns.length} buttons found after ${maxBtnAttempts} attempts, need 2`, 'error');
-    return { success: false, submitted: false, message: `Only ${btns.length} buttons found, need 2` };
+    const rowBtns = Array.from(row.querySelectorAll('button'));
+    const approveCandidate = rowBtns.find(b => {
+      const t = (b.textContent || '').trim().toLowerCase();
+      return t === 'approve' || t.includes('approve');
+    });
+    const rejectCandidate = rowBtns.find(b => {
+      const t = (b.textContent || '').trim().toLowerCase();
+      return t === 'reject' || t.includes('reject');
+    });
+    if (approveCandidate || rejectCandidate) {
+      btns = [approveCandidate, rejectCandidate].filter(Boolean);
+      log(`clickApproveOrReject: Found ${btns.length} button(s) by text scan (Approve: ${!!approveCandidate}, Reject: ${!!rejectCandidate})`);
+    }
   }
-  
-  // Resolve which button is Approve and which is Reject (order can vary)
-  const approveBtn = btns[0].textContent?.trim() === 'Approve' ? btns[0] : (btns[1].textContent?.trim() === 'Approve' ? btns[1] : btns[0]);
-  const rejectBtn = btns[0].textContent?.trim() === 'Reject' ? btns[0] : (btns[1].textContent?.trim() === 'Reject' ? btns[1] : btns[1]);
+
+  // If we still only have 1 button, use it if it matches the requested action
+  if (btns.length === 1) {
+    const btnText = (btns[0].textContent || '').trim().toLowerCase();
+    if (btnText.includes(action)) {
+      log(`clickApproveOrReject: Only 1 button found but it matches action "${action}" — using it`);
+    } else {
+      log(`clickApproveOrReject: Only 1 button found ("${btnText}") but need "${action}"`, 'error');
+      return { success: false, submitted: false, message: `Only 1 button found ("${btnText}"), need "${action}"` };
+    }
+  }
+
+  if (btns.length === 0) {
+    log(`clickApproveOrReject: no buttons found after ${maxBtnAttempts} attempts`, 'error');
+    return { success: false, submitted: false, message: `No approve/reject buttons found` };
+  }
+
+  // Resolve which button is Approve and which is Reject
+  const approveBtn = btns.find(b => (b.textContent || '').trim().toLowerCase().includes('approve')) || btns[0];
+  const rejectBtn = btns.find(b => (b.textContent || '').trim().toLowerCase().includes('reject')) || btns[btns.length > 1 ? 1 : 0];
   log(`clickApproveOrReject: Found buttons — Approve: "${approveBtn.textContent?.trim()}", Reject: "${rejectBtn.textContent?.trim()}"`);
   
   if (action === 'approve') {
