@@ -628,13 +628,16 @@ async function updateOrderFinalAction(orderId, finalAction, statusDetail) {
   const action = finalAction === 'approve' ? 'approved' : 'rejected';
   log(`DB: Updating final_action to ${action} for order_id=${orderId}`);
   const url = `${settings.dbApiUrl}/api/orders/${encodeURIComponent(orderId)}/status`;
+  const payload = { finalAction: action, statusDetail: statusDetail || '' };
+  log(`DB: PUT ${url} payload=${JSON.stringify(payload)}`);
   let res = await proxyFetch(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ finalAction: action, statusDetail: statusDetail || '' })
+    body: JSON.stringify(payload)
   });
+  log(`DB: PUT response status=${res.status} ok=${res.ok} data=${JSON.stringify(res.data)}`);
   if (res.ok) {
-    log(`DB: final_action=${action} saved for order_id=${orderId}`);
+    log(`DB: ✅ final_action=${action} saved for order_id=${orderId}`);
     return res;
   }
   if (res.status === 404 && typeof orderId === 'string' && orderId.includes('_')) {
@@ -644,9 +647,13 @@ async function updateOrderFinalAction(orderId, finalAction, statusDetail) {
     res = await proxyFetch(retryUrl, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ finalAction: action, statusDetail: statusDetail || '' })
+      body: JSON.stringify(payload)
     });
-    if (res.ok) log(`DB: final_action=${action} saved for order_id=${transferRef}`);
+    log(`DB: retry response status=${res.status} ok=${res.ok} data=${JSON.stringify(res.data)}`);
+    if (res.ok) log(`DB: ✅ final_action=${action} saved for order_id=${transferRef}`);
+    else log(`DB: ❌ retry also failed status=${res.status}`, 'error');
+  } else if (!res.ok) {
+    log(`DB: ❌ updateOrderFinalAction FAILED status=${res.status} for order_id=${orderId}`, 'error');
   }
   return res;
 }
