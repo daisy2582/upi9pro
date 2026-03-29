@@ -17,7 +17,9 @@ let creatingReaderTab = false;   // Lock to prevent concurrent reader tab creati
 let readerLoopBusy = false;     // Lock to prevent overlapping reader loop iterations (and duplicate runProcessCycle)
 let mismatchPollBusy = false;   // Lock to prevent overlapping mismatch poll cycles
 const MISMATCH_POLL_INTERVAL_MS = 1 * 60 * 1000; // 1 minute — mismatch clearing is priority
-const MISMATCH_PARALLEL_TABS = 5;  // Max tabs open at the same time (1 order per tab, all in parallel)
+const MISMATCH_PARALLEL_TABS = 5;  // Max tabs open at the same time
+const MISMATCH_ORDERS_PER_TAB = 3; // Orders processed sequentially per tab (5 tabs × 3 orders = 15 per batch)
+const MISMATCH_INTER_ORDER_DELAY_MS = 3000; // 3s between orders within a tab
 const MISMATCH_INTER_BATCH_DELAY_MS = 10000; // 10s between parallel batches
 const PROCESS_INTERVAL_MS = 30 * 1000; // 30 sec delay between reader loop runs — avoids triggering panel rate limiter
 const CRYPTO_PAGE_SWITCH_INTERVAL_MS = 5 * 60 * 1000; // Switch to crypto page every 5 minutes
@@ -1336,11 +1338,14 @@ async function processSingleMismatchOrder(tabId, order, pageType, index, total) 
 }
 
 /**
- * Process a single mismatch order on its own fresh tab (open → login → search → click → close).
- * Returns a promise. Multiple of these run in parallel (up to MISMATCH_PARALLEL_TABS).
+ * Process multiple orders on a single fresh tab (open → login → process N orders sequentially → close).
+ * @param {Array} orders - Orders to process on this tab (up to MISMATCH_ORDERS_PER_TAB)
+ * @param {string} pageType - 'flat' or 'crypto'
+ * @param {string} pageUrl - URL to open
+ * @param {number} tabIndex - Which tab this is (for logging)
+ * @param {number} totalOrders - Total orders across all tabs (for logging)
  */
-async function processSingleOrderOnFreshTab(order, pageType, pageUrl, index, total) {
-  const orderId = order.order_id || order.transfer_reference_id;
+async function processOrdersOnFreshTab(orders, pageType, pageUrl, tabIndex, totalOrders) {
   let tabId = null;
   try {
     // 1. Create fresh tab
@@ -1349,17 +1354,16 @@ async function processSingleOrderOnFreshTab(order, pageType, pageUrl, index, tot
     // 2. Login if needed
     const loginCheck = await sendToContent(tabId, 'isLoginPage').catch(() => ({ isLoginPage: false }));
     if (loginCheck?.isLoginPage) {
-      log(`Mismatch ${pageType} [${index + 1}/${total}]: tab on login page, logging in...`);
+      log(`Mismatch ${pageType} tab${tabIndex + 1}: logging in...`);
       await sendToContent(tabId, 'performLogin', {
         username: settings.panelUsername,
         password: settings.panelPassword
       }).catch(e => {
-        log(`Mismatch ${pageType} [${index + 1}/${total}]: login failed: ${e.message}`, 'error');
+        log(`Mismatch ${pageType} tab${tabIndex + 1}: login failed: ${e.message}`, 'error');
       });
       await new Promise(r => setTimeout(r, 3000));
       await waitForTabComplete(tabId, 15000);
 
-      // Navigate back to withdrawals page after login
       await chrome.tabs.update(tabId, { url: pageUrl });
       await waitForTabComplete(tabId, 20000);
       try {
@@ -1387,50 +1391,72 @@ async function processSingleOrderOnFreshTab(order, pageType, pageUrl, index, tot
       await new Promise(r => setTimeout(r, 1500));
     }
 
-    // 4. Set filter and refresh
+    // 4. Set filter and refresh (once per tab, shared by all orders)
     await sendToContent(tabId, 'setDateFilterToWeek').catch(() => {});
     await new Promise(r => setTimeout(r, 500));
     await sendToContent(tabId, 'clickRefresh').catch(() => {});
     await new Promise(r => setTimeout(r, 2500));
 
-    // 5. Process the order
-    await processSingleMismatchOrder(tabId, order, pageType, index, total);
+    // 5. Process each order sequentially on this tab
+    for (let i = 0; i < orders.length; i++) {
+      if (!isRunning) break;
+      const order = orders[i];
+      const globalIdx = tabIndex * MISMATCH_ORDERS_PER_TAB + i;
 
-    log(`Mismatch ${pageType} [${index + 1}/${total}]: done (order_id=${orderId})`);
+      // Verify tab still alive
+      try {
+        const tabInfo = await chrome.tabs.get(tabId);
+        if (!tabInfo || tabInfo.discarded) break;
+      } catch { tabId = null; break; }
+
+      await processSingleMismatchOrder(tabId, order, pageType, globalIdx, totalOrders);
+
+      // Delay between orders on same tab
+      if (i < orders.length - 1 && isRunning) {
+        await new Promise(r => setTimeout(r, MISMATCH_INTER_ORDER_DELAY_MS));
+      }
+    }
+
+    log(`Mismatch ${pageType} tab${tabIndex + 1}: done (${orders.length} orders)`);
   } catch (e) {
-    log(`Mismatch ${pageType} [${index + 1}/${total}] error: ${e.message}`, 'error');
+    log(`Mismatch ${pageType} tab${tabIndex + 1} error: ${e.message}`, 'error');
   } finally {
-    // 6. ALWAYS close the tab
     if (tabId) await closeMismatchTab(tabId);
   }
 }
 
 /**
- * Process mismatch orders in parallel — up to MISMATCH_PARALLEL_TABS tabs at once.
- * Each order gets its own tab (open → login → search → approve/reject → close).
+ * Process mismatch orders: 5 parallel tabs × 3 orders each = 15 per batch.
+ * Each tab opens → logs in once → processes 3 orders sequentially → closes.
  */
 async function processMismatchBatch(orderList, pageType, pageUrl) {
   if (!orderList || orderList.length === 0) return;
   if (!isRunning) return;
 
-  log(`Mismatch ${pageType}: processing ${orderList.length} order(s) with ${MISMATCH_PARALLEL_TABS} parallel tabs`);
+  const ordersPerBatch = MISMATCH_PARALLEL_TABS * MISMATCH_ORDERS_PER_TAB; // 5 × 3 = 15
+  log(`Mismatch ${pageType}: processing ${orderList.length} order(s) — ${MISMATCH_PARALLEL_TABS} tabs × ${MISMATCH_ORDERS_PER_TAB} orders = ${ordersPerBatch} per batch`);
 
-  // Process in chunks of MISMATCH_PARALLEL_TABS
-  for (let i = 0; i < orderList.length; i += MISMATCH_PARALLEL_TABS) {
+  for (let batchStart = 0; batchStart < orderList.length; batchStart += ordersPerBatch) {
     if (!isRunning) break;
-    const chunk = orderList.slice(i, i + MISMATCH_PARALLEL_TABS);
-    log(`Mismatch ${pageType}: parallel batch ${Math.floor(i / MISMATCH_PARALLEL_TABS) + 1} — ${chunk.length} tab(s) opening...`);
+    const batchOrders = orderList.slice(batchStart, batchStart + ordersPerBatch);
+    const batchNum = Math.floor(batchStart / ordersPerBatch) + 1;
+    log(`Mismatch ${pageType}: batch ${batchNum} — ${batchOrders.length} orders across ${Math.min(MISMATCH_PARALLEL_TABS, Math.ceil(batchOrders.length / MISMATCH_ORDERS_PER_TAB))} tab(s)`);
 
-    // Launch all tabs in parallel, wait for all to finish
+    // Split batch into per-tab chunks of MISMATCH_ORDERS_PER_TAB
+    const tabChunks = [];
+    for (let i = 0; i < batchOrders.length; i += MISMATCH_ORDERS_PER_TAB) {
+      tabChunks.push(batchOrders.slice(i, i + MISMATCH_ORDERS_PER_TAB));
+    }
+
+    // Launch all tabs in parallel
     await Promise.allSettled(
-      chunk.map((order, j) => processSingleOrderOnFreshTab(order, pageType, pageUrl, i + j, orderList.length))
+      tabChunks.map((chunk, tabIdx) => processOrdersOnFreshTab(chunk, pageType, pageUrl, tabIdx, orderList.length))
     );
 
-    log(`Mismatch ${pageType}: parallel batch done (${chunk.length} orders)`);
+    log(`Mismatch ${pageType}: batch ${batchNum} done (${batchOrders.length} orders)`);
 
-    // Delay between parallel batches
-    if (i + MISMATCH_PARALLEL_TABS < orderList.length && isRunning) {
-      log(`Mismatch ${pageType}: waiting ${MISMATCH_INTER_BATCH_DELAY_MS / 1000}s before next parallel batch...`);
+    if (batchStart + ordersPerBatch < orderList.length && isRunning) {
+      log(`Mismatch ${pageType}: waiting ${MISMATCH_INTER_BATCH_DELAY_MS / 1000}s before next batch...`);
       await new Promise(r => setTimeout(r, MISMATCH_INTER_BATCH_DELAY_MS));
     }
   }
