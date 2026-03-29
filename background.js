@@ -18,8 +18,8 @@ let readerLoopBusy = false;     // Lock to prevent overlapping reader loop itera
 let mismatchPollBusy = false;   // Lock to prevent overlapping mismatch poll cycles
 const MISMATCH_POLL_INTERVAL_MS = 1 * 60 * 1000; // 1 minute — mismatch clearing is priority
 const MISMATCH_BATCH_SIZE = 3;   // Max orders to process per mismatch tab (open → process 3 → close)
-const MISMATCH_INTER_ORDER_DELAY_MS = 3000; // Delay between individual orders in a batch
-const MISMATCH_INTER_BATCH_DELAY_MS = 5000; // Delay between batches (flat → crypto, or next poll)
+const MISMATCH_INTER_ORDER_DELAY_MS = 5000; // Delay between individual orders in a batch (5s to avoid "actions blocked")
+const MISMATCH_INTER_BATCH_DELAY_MS = 10000; // Delay between batches (10s to avoid "actions blocked")
 const PROCESS_INTERVAL_MS = 20 * 1000; // 20 sec delay between end of one run and start of next (each run can take 40–80s)
 const CRYPTO_PAGE_SWITCH_INTERVAL_MS = 5 * 60 * 1000; // Switch to crypto page every 5 minutes
 let lastCryptoPageVisitAt = 0; // Timestamp of last crypto page visit
@@ -1257,11 +1257,21 @@ async function processSingleMismatchOrder(tabId, order, pageType, index, total) 
     });
     if (res?.success && res?.submitted) everSubmitted = true;
 
-    const msg = res?.message || '';
+    const msg = res?.message || res?.error || '';
     const rowNotFound = typeof msg === 'string' && msg.includes('No row with matching transfer_id found');
+    const actionsBlocked = typeof msg === 'string' && (msg.toLowerCase().includes('block') || msg.toLowerCase().includes('actions blocked'));
     const confirmedCleared = res?.success && res?.submitted && (res?.cleared === true);
 
     if (confirmedCleared) break;
+
+    // If panel says "actions blocked", wait and retry
+    if (actionsBlocked && attempt < maxRowSearchAttempts) {
+      const waitMatch = msg.match(/(\d+)\s*sec/i);
+      const waitSec = waitMatch ? parseInt(waitMatch[1]) + 3 : 15;
+      log(`Mismatch order_id=${orderId}: panel actions blocked — waiting ${waitSec}s then retrying...`, 'warn');
+      await new Promise(r => setTimeout(r, waitSec * 1000));
+      continue;
+    }
 
     if (res?.success && res?.submitted && !res?.cleared) {
       log(`Mismatch order_id=${orderId}: modal submitted but row still on panel (cleared=false), retrying in 2s...`, 'info');

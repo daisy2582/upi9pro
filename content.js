@@ -3710,6 +3710,15 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
           return { success: false, message };
         };
         
+        // Step 0.25: Check for "actions blocked" toast and wait it out
+        const blockedToast = captureToastNotification();
+        if (blockedToast && (blockedToast.text.toLowerCase().includes('block') || blockedToast.text.toLowerCase().includes('retry'))) {
+          const waitMatch = blockedToast.text.match(/(\d+)\s*sec/i);
+          const waitSec = waitMatch ? parseInt(waitMatch[1]) + 2 : 15; // add 2s buffer
+          log(`searchAndClickAction: Panel says "${blockedToast.text}" — waiting ${waitSec}s before proceeding...`, 'warn');
+          await new Promise(r => setTimeout(r, waitSec * 1000));
+        }
+
         // Step 0.5: Set date filter to Week before searching (enter field, Week selected, then search)
         log('searchAndClickAction: Setting date filter to Week before search...');
         const filterRes = await setDateFilterToWeek();
