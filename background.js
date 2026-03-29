@@ -1430,7 +1430,7 @@ async function processMismatchBatch(orderList, pageType, pageUrl) {
 }
 
 /**
- * Main mismatch cycle: fetch orders → split into batches of MISMATCH_BATCH_SIZE → process each batch on fresh tab.
+ * Main mismatch cycle: fetch orders → split into batches of MISMATCH_PARALLEL_TABS → process each batch on fresh tab.
  */
 async function runMismatchCycle() {
   if (!isRunning) return;
@@ -1462,7 +1462,7 @@ async function runMismatchCycle() {
     if (myOrders.length < orders.length) {
       log(`Mismatch: ${orders.length} total, ${myOrders.length} belong to current user (${mySlug})`);
     }
-    log(`Mismatch: ${flatOrders.length} flat order(s), ${cryptoOrders.length} crypto order(s) to process (batch size: ${MISMATCH_BATCH_SIZE})`);
+    log(`Mismatch: ${flatOrders.length} flat order(s), ${cryptoOrders.length} crypto order(s) to process (batch size: ${MISMATCH_PARALLEL_TABS})`);
     cryptoOrders.forEach((o, i) => {
       log(`Mismatch crypto ${i + 1}: order_id=${o.order_id || o.transfer_reference_id} bank_name=${o.bank_name || o.bankName || 'null'}`);
     });
@@ -1929,7 +1929,7 @@ async function readerLoop() {
  * Starts 10s after automation start (reader tab logs in first via shared cookies).
  */
 function startMismatchPolling() {
-  log(`Mismatch polling will start in 10s, then every ${MISMATCH_POLL_INTERVAL_MS / 60000} min (batch size: ${MISMATCH_BATCH_SIZE})`);
+  log(`Mismatch polling will start in 10s, then every ${MISMATCH_POLL_INTERVAL_MS / 60000} min (batch size: ${MISMATCH_PARALLEL_TABS})`);
   const poll = async () => {
     if (!isRunning) return;
     if (mismatchPollBusy) {
