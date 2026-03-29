@@ -1321,13 +1321,7 @@ async function processSingleMismatchOrder(tabId, order, pageType, index, total) 
       (msg.includes('Only ') && msg.includes('buttons found'))
     );
     if (rowNotFoundMsg) {
-      // Order not found on panel = panel already processed it (moved from PENDING to IN_PROCESS).
-      // The panel's search only shows PENDING, so IN_PROCESS orders won't appear.
-      // Since GatewayHub already confirmed the status, mark it done in our DB.
-      log(`Mismatch order_id=${orderId}: not found on panel (already processed by panel) — marking as ${clickAction} in DB`, 'info');
-      await updateOrderFinalAction(orderId, clickAction, '').catch(e => {
-        log(`Failed to update order final action for ${orderId}: ${e.message}`, 'warn');
-      });
+      log(`Mismatch order_id=${orderId}: not found on panel — NOT updating final_action; will retry next poll`, 'info');
     } else if (buttonClickFailedMsg) {
       log(`Mismatch order_id=${orderId}: approve/reject button not clickable — will retry next poll`, 'info');
     }

@@ -3887,9 +3887,18 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         }
         
         if (!matchingRowButton) {
-          log(`searchAndClickAction: No matching row found after search — order likely already IN_PROCESS on panel (not visible in PENDING view)`, 'warn');
-          // Don't waste time with slow fallback (opening 15+ modals). Return not-found immediately.
-          // Background.js will mark the order as done since GatewayHub already confirmed the status.
+          log(`searchAndClickAction: No matching row found after search`, 'warn');
+          // Quick fallback: clear search, scroll to Transfer Reference ID column, scan table rows directly (no modal opening)
+          log(`searchAndClickAction: Fallback — clearing search, scanning table for transfer_id...`);
+          await clearSearchByCloseButton() || await clearSearch();
+          await new Promise(r => setTimeout(r, 1500));
+          // Try finding row by scrolling to Transfer Reference ID column and reading cells
+          const fallbackIdx = await findRowIndexByTransferId(searchOrderId);
+          if (fallbackIdx >= 0) {
+            log(`searchAndClickAction: Fallback found row at index ${fallbackIdx}, clicking ${searchClickAction}...`);
+            const result = await clickApproveOrReject(fallbackIdx, searchClickAction, searchUtr);
+            return { success: result.success, submitted: result.submitted, message: result.message || (result.success ? 'Completed via fallback' : 'Failed via fallback') };
+          }
           return await clearSearchAndReturn(`No row with matching transfer_id found after searching for ${searchOrderId}`);
         }
         
