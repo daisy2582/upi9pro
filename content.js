@@ -2543,7 +2543,7 @@ async function getUsernameAndTransferIdFromSameRow(rowIndex) {
         const innerDiv = userNameCell.querySelector('div');
         let raw = (innerDiv?.textContent || userNameCell?.textContent || '').trim();
         if (!raw) continue;
-        if (/^\d+$/.test(raw) && raw.length >= 6) continue; // skip account-number-like
+        if (/^\d+$/.test(raw) && raw.length >= 10) continue; // skip account numbers (10+ pure digits), allow short numeric usernames
         if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) continue; // skip UUID
         if (isAppOrBranchName(raw)) continue; // skip "Winfix branch 3 OPTION 1" etc.
         username = raw;
@@ -2952,7 +2952,7 @@ async function bulkExtractCurrentPage(skipSet, center) {
         const cell = row.querySelector(`[col-id="${colId}"]`);
         if (cell) {
           const raw = (cell.querySelector('div')?.textContent || cell.textContent || '').trim();
-          if (raw && !/^\d{6,}$/.test(raw) && !/^[0-9a-f]{8}-/.test(raw) && !isAppOrBranchName(raw)) {
+          if (raw && !/^\d{10,}$/.test(raw) && !/^[0-9a-f]{8}-/.test(raw) && !isAppOrBranchName(raw)) {
             username = raw;
             break;
           }
