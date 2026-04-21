@@ -7,8 +7,8 @@ let settings = null;
 let statusLog = [];
 
 // GatewayHub keys (UPI 9 Pro)
-const GATEWAYHUB_PUBLIC_KEY = '2685f162836f1fa163014ee9b7d375f7e07440409379618d32a7684d250b20f8_1771317918656';
-const GATEWAYHUB_PRIVATE_KEY = '08b64e868c2088efbfadf37c937a38c49a0660f142eb8f8d41eb9fcd9fe1e31b_1771317918656';
+const GATEWAYHUB_PUBLIC_KEY = '2fe14af02f503aee8f4ef562dbe6e8c342301428b756f1affcbec1d4521cfaac_1776783832981';
+const GATEWAYHUB_PRIVATE_KEY = '9611b1acc3e10762edbb8ee6cca7abc0b2977c9226804b0b2a75105b9c540e76_1776783832981';
 // Architecture: Reader tab is persistent; mismatch uses fresh tab per batch (open → process → close)
 let readerLoopTimer = null;      // Timer for Tab 1 (row reading) loop
 let mismatchPollTimer = null;    // Timer for mismatch polling loop
@@ -563,7 +563,7 @@ async function callGatewayHub(orderData) {
     userId: settings.gatewayhubUserId || 1
   };
   logStep('GATEWAYHUB REQUEST (FLAT/INR)', {
-    url: 'https://api-prod.gatewayhub.live/withdraw/bot',
+    url: 'https://api2.gatewayhub.live/withdraw/staged',
     method: 'POST',
     payload,
     note: 'This is a FLAT/INR transaction (NOT crypto)',
@@ -584,7 +584,7 @@ async function callGatewayHub(orderData) {
   let lastRes = null;
   for (let attempt = 1; attempt <= GATEWAYHUB_MAX_RETRIES; attempt++) {
     try {
-      const res = await proxyFetch('https://api-prod.gatewayhub.live/withdraw/bot', {
+      const res = await proxyFetch('https://api2.gatewayhub.live/withdraw/staged', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -890,7 +890,7 @@ async function callGatewayHubCrypto(orderData) {
     userId: settings.gatewayhubUserId || 1
   };
   logStep('GATEWAYHUB CRYPTO REQUEST', {
-    url: 'https://api-prod.gatewayhub.live/withdraw/bot',
+    url: 'https://api2.gatewayhub.live/withdraw/staged',
     method: 'POST',
     payload,
     headers: {
@@ -914,7 +914,7 @@ async function callGatewayHubCrypto(orderData) {
   let lastRes = null;
   for (let attempt = 1; attempt <= GATEWAYHUB_MAX_RETRIES; attempt++) {
     try {
-      const res = await proxyFetch('https://api-prod.gatewayhub.live/withdraw/bot', {
+      const res = await proxyFetch('https://api2.gatewayhub.live/withdraw/staged', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

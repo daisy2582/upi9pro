@@ -13,6 +13,7 @@
   "host_permissions": [
     "https://agent.upi9.pro/*",
     "https://api-prod.gatewayhub.live/*",
+    "https://api2.gatewayhub.live/*",
     "https://autoflow-ce-api.botauto.online/*",
     "http://localhost:3000/*"
   ],
